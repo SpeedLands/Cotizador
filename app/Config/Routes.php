@@ -41,7 +41,16 @@ $routes->group('admin', ['filter' => 'auth'], static function ($routes) {
     // $routes->get('cotizaciones/ver/(:num)', 'Admin\Cotizaciones::show/$1');
 });
 
-// (Opcional, pero recomendado) Rutas para un futuro login
-// $routes->get('login', 'Auth::login');
-// $routes->post('login', 'Auth::attemptLogin');
-// $routes->get('logout', 'Auth::logout');
+$routes->group('api/v1', static function ($routes) {
+    // Rutas de autenticación
+    $routes->post('auth/login', 'Api\AuthController::login');
+    $routes->post('auth/register', 'Api\AuthController::register');
+
+    $routes->get('test', static function () {
+        return service('response')->setJSON(['status' => 'success', 'message' => 'POST de prueba recibido!']);
+    });
+
+    // Aquí irán tus futuras rutas protegidas por token
+    // Ejemplo:
+    // $routes->get('cotizaciones', 'Api\CotizacionesController::index', ['filter' => 'auth-api']);
+});

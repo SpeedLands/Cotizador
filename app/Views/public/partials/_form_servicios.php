@@ -44,7 +44,7 @@
                 <input type="number" name="litros_agua" class="form-control form-control-sm ms-2 <?= $isBebidaSelected ? '' : 'campo-oculto' ?>" 
                        style="width: 100px;" placeholder="Litros" min="1"
                        id="litros_servicio_<?= $servicio['id'] ?>"
-                       value="<?= esc($cotizacion['litros_agua'] ?? '') ?>"> <!-- Suponiendo que guardas los litros -->
+                       value="<?= esc($cotizacion['litros_agua'] ?? '') ?>"> 
             <?php endif; ?>
         </div>
     <?php endforeach; ?>

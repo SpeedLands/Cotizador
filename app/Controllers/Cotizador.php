@@ -3,11 +3,33 @@
 namespace App\Controllers;
 
 use App\Models\ServicioModel; 
+use App\Libraries\FirebaseService;
 
 class Cotizador extends BaseController
 {
     public function index()
     {
+        try {
+            $firebase = new FirebaseService();
+            
+            $titulo = "Prueba de Notificación";
+            $mensaje = "¡El servicio de Firebase funciona correctamente!";
+            
+            // ¡IMPORTANTE! Reemplaza esto con un TOKEN REAL de un dispositivo para probar.
+            $tokensDePrueba = ['dKSOFl4gSae8H7MGWb8E_X:APA91bFjU7zPO0Rjxhkd1DQxAVwjxPTz7mbSzqZLJFP_QXfY3W5-Dav8BTDdUaKzVthFcXe9ZiOOu2herw4BnzArzLCffgv5NM1XurJp1x2sV5TEG3s4GDA'];
+
+            // Si no tienes un token real, el envío fallará, pero si no hay errores
+            // de configuración (como el archivo JSON), es una buena señal.
+            if (!empty($tokensDePrueba[0]) && $tokensDePrueba[0] !== 'tu_token_de_dispositivo_aqui') {
+                $firebase->sendNotification($titulo, $mensaje, $tokensDePrueba);
+                log_message('info', 'Notificación de prueba enviada.');
+            }
+
+        } catch (\Exception $e) {
+            // Si la configuración de FirebaseService falla (ej: no encuentra el archivo JSON),
+            // se registrará aquí. Revisa writable/logs/
+            log_message('error', 'Error al inicializar FirebaseService: ' . $e->getMessage());
+        }
         $servicioModel = new ServicioModel();
         $data['servicios'] = $servicioModel->findAll();
         return view('public/cotizador_view', $data);
