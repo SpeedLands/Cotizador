@@ -18,6 +18,69 @@ class FirebaseService
         $this->token = $client->fetchAccessTokenWithAssertion();
     }
 
+    // --- MÉTODO NUEVO PARA ENVIAR A TOPICS ---
+
+    /**
+     * Envía una notificación a un Topic específico.
+     *
+     * @param string $topic El nombre del topic (ej: 'admins')
+     * @param string $title El título de la notificación
+     * @param string $body El cuerpo del mensaje
+     * @param array $data Datos adicionales para que la app los procese
+     * @return array La respuesta de Firebase decodificada
+     */
+    public function sendToTopic(string $topic, string $title, string $body, array $data = []): array
+    {
+        // 1. Construimos el payload, usando 'topic' en lugar de 'token'.
+        $messageData = [
+            'message' => [
+                'topic' => $topic, // <-- ¡El cambio clave está aquí!
+                'notification' => [
+                    'title' => $title,
+                    'body' => $body
+                ],
+                'android' => [
+                    'notification' => [
+                        'click_action' => 'FLUTTER_NOTIFICATION_CLICK'
+                    ]
+                ],
+                // 2. Simplificamos la estructura de 'data'. FCM espera un mapa plano de strings.
+                'data' => $data
+            ]
+        ];
+
+        // 3. El resto del código es idéntico al que ya tenías.
+        $curl = curl_init();
+        
+        curl_setopt_array($curl, [
+            CURLOPT_URL => 'https://fcm.googleapis.com/v1/projects/mapolato-27709/messages:send',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => '',
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => 'POST',
+            CURLOPT_POSTFIELDS => json_encode($messageData),
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $this->token['access_token']
+            ]
+        ]);
+
+        $response = curl_exec($curl);
+        $error = curl_error($curl);
+        curl_close($curl);
+
+        if ($error) {
+            log_message('error', 'FCM cURL Error: ' . $error);
+            return ['error' => $error];
+        }
+
+        log_message('info', 'FCM Response for topic ' . $topic . ': ' . $response);
+        return json_decode($response, true);
+    }
+
     /**
      * Send Notification to Multiple Devices via Firebase Cloud Messaging (FCM)
      *

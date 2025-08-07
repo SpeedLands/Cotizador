@@ -50,6 +50,13 @@ $routes->group('api/v1', static function ($routes) {
         return service('response')->setJSON(['status' => 'success', 'message' => 'POST de prueba recibido!']);
     });
 
+    $routes->get('servicios', 'Api\ServiciosController::index');
+    // GET para obtener las fechas no disponibles del calendario
+    $routes->get('calendario/fechas-ocupadas', 'Api\CotizacionesController::fechasOcupadas');
+
+    // POST para crear/guardar una nueva cotización
+    $routes->post('cotizaciones', 'Api\CotizacionesController::guardar');
+
     // Aquí irán tus futuras rutas protegidas por token
     // Ejemplo:
     // $routes->get('cotizaciones', 'Api\CotizacionesController::index', ['filter' => 'auth-api']);
