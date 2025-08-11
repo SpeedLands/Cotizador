@@ -35,29 +35,19 @@ $routes->group('admin', ['filter' => 'auth'], static function ($routes) {
     $routes->post('servicios/actualizar', 'Admin\Servicios::actualizar');
     $routes->get('calendario', 'Admin\CalendarioController::index');
     $routes->get('calendario/eventos', 'Admin\CalendarioController::eventos');
-    
-    // Aquí puedes añadir más rutas de admin en el futuro, por ejemplo:
-    // $routes->get('cotizaciones', 'Admin\Cotizaciones::index');
-    // $routes->get('cotizaciones/ver/(:num)', 'Admin\Cotizaciones::show/$1');
 });
 
 $routes->group('api/v1', static function ($routes) {
     // Rutas de autenticación
     $routes->post('auth/login', 'Api\AuthController::login');
+    // esta ruta es probable que no se use
     $routes->post('auth/register', 'Api\AuthController::register');
 
-    $routes->get('test', static function () {
-        return service('response')->setJSON(['status' => 'success', 'message' => 'POST de prueba recibido!']);
-    });
-
+    // Ruta para obtener la lista de servicios
     $routes->get('servicios', 'Api\ServiciosController::index');
     // GET para obtener las fechas no disponibles del calendario
     $routes->get('calendario/fechas-ocupadas', 'Api\CotizacionesController::fechasOcupadas');
 
     // POST para crear/guardar una nueva cotización
     $routes->post('cotizaciones', 'Api\CotizacionesController::guardar');
-
-    // Aquí irán tus futuras rutas protegidas por token
-    // Ejemplo:
-    // $routes->get('cotizaciones', 'Api\CotizacionesController::index', ['filter' => 'auth-api']);
 });

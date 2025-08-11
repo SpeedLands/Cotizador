@@ -1,18 +1,19 @@
 <?php
 
+// probalemnete esto ya no exista en el futuro
+
 namespace App\Controllers\Admin;
 
-// 1. Importa la clase que creaste
 use App\Libraries\FirebaseService;
 
 class NotificationController extends BaseController
 {
     public function sendTestNotification()
     {
-        // 2. Crea una instancia de tu servicio
+        // Crea una instancia de tu servicio
         $firebase = new FirebaseService();
 
-        // 3. Define los detalles de la notificación
+        // Define los detalles de la notificación
         $title = '¡Hola desde el Servidor!';
         $message = 'Esta es una notificación de prueba enviada con PHP.';
 
