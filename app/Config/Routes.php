@@ -50,4 +50,7 @@ $routes->group('api/v1', static function ($routes) {
 
     // POST para crear/guardar una nueva cotización
     $routes->post('cotizaciones', 'Api\CotizacionesController::guardar');
+
+    // GET para listar todas las cotizaciones
+    $routes->get('cotizaciones', 'Api\CotizacionesController::index');
 });

@@ -2,7 +2,7 @@
 namespace App\Controllers\Admin;
 
 use App\Controllers\BaseController;
-use App\Models\CotizacionModel; // Usaremos el modelo que ya creamos
+use App\Models\CotizacionModel;
 
 class Cotizaciones extends BaseController
 {
@@ -71,8 +71,6 @@ class Cotizaciones extends BaseController
         return redirect()->to(site_url('admin/cotizaciones/ver/' . $id))
                         ->with('mensaje', 'El estado de la cotización ha sido actualizado con éxito.');
     }
-
-    // Dentro de la clase App\Controllers\Admin\Cotizaciones
 
     public function eliminar()
     {

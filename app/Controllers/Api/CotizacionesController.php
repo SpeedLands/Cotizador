@@ -9,10 +9,37 @@ use App\Models\CotizacionModel;
 use App\Models\NotificationModel;
 use App\Models\CotizacionServiciosModel;
 use App\Libraries\FirebaseService;
+use App\Libraries\LogisticsAIService;
 use Config\Services;
 
 class CotizacionesController extends BaseController
 {
+    /**
+     * Lista todas las cotizaciones.
+     * Ordena por fecha de creación descendente (las más nuevas primero).
+     */
+    public function index()
+    {
+        $cotizacionModel = new CotizacionModel();
+        
+        // Usamos findAll() para obtener todas las cotizaciones.
+        // orderBy() las ordena para que las más recientes aparezcan primero.
+        $cotizaciones = $cotizacionModel->orderBy('created_at', 'DESC')->findAll();
+
+        if (empty($cotizaciones)) {
+            return $this->response->setJSON([
+                'status' => 'success',
+                'data' => [] // Devuelve un array vacío si no hay cotizaciones
+            ])->setStatusCode(200);
+        }
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'data' => $cotizaciones
+        ])->setStatusCode(200);
+    }
+
+
     public function fechasOcupadas()
     {
         $cotizacionModel = new CotizacionModel();
@@ -71,9 +98,12 @@ class CotizacionesController extends BaseController
         $notasLogistica = "Dificultad de montaje: " . ($json['dificultad_montaje'] ?? 'No especificada') . "\n";
         $notasLogistica .= "Requisitos adicionales: " . ($json['requisitos_adicionales'] ?? 'Ninguno') . "\n";
         $notasLogistica .= "Otros servicios no listados: " . ($json['servicios_otros'] ?? 'Ninguno') . "\n";
-        
-        $costoAdicionalIA = 0;
-        $justificacionIA = 'Sin costos adicionales por logística.';
+
+        $logisticsService = new LogisticsAIService();
+
+        $prediction = $logisticsService->predict($json);
+        $costoAdicionalIA = $prediction['costo'];
+        $justificacionIA = $prediction['justificacion'];
         
         
         $cotizacionModel = new CotizacionModel();

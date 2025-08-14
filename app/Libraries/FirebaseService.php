@@ -34,7 +34,7 @@ class FirebaseService
         // 1. Construimos el payload, usando 'topic' en lugar de 'token'.
         $messageData = [
             'message' => [
-                'topic' => $topic, // <-- ¡El cambio clave está aquí!
+                'topic' => $topic,
                 'notification' => [
                     'title' => $title,
                     'body' => $body
@@ -49,7 +49,6 @@ class FirebaseService
             ]
         ];
 
-        // 3. El resto del código es idéntico al que ya tenías.
         $curl = curl_init();
         
         curl_setopt_array($curl, [
@@ -80,6 +79,8 @@ class FirebaseService
         log_message('info', 'FCM Response for topic ' . $topic . ': ' . $response);
         return json_decode($response, true);
     }
+
+    // Esta funcion de Tokens es mas para web que para moviles por eso se cambio al uso de topics por que hace que los prcesos sean mas rapidos
 
     /**
      * Send Notification to Multiple Devices via Firebase Cloud Messaging (FCM)
