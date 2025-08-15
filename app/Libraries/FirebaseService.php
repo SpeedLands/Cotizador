@@ -40,7 +40,11 @@ class FirebaseService
                     'body' => $body
                 ],
                 'android' => [
+                    'priority' => 'high',
                     'notification' => [
+                        'sound' => 'default',
+                        'icon' => 'ic_stact_notification',
+                        'channel_id' => 'high_importance_channel',
                         'click_action' => 'FLUTTER_NOTIFICATION_CLICK'
                     ]
                 ],

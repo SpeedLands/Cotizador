@@ -2,8 +2,15 @@
 
 namespace App\Controllers;
 
+use App\Controllers\BaseController;
 use App\Models\ServicioModel; 
+use App\Models\UsuarioModel;
+use App\Models\CotizacionModel;
+use App\Models\NotificationModel; 
+use App\Models\CotizacionServiciosModel;
 use App\Libraries\FirebaseService;
+use App\Libraries\LogisticsAIService;
+use Config\Services;
 
 // este apartado esta pasando por una restructuracion completa
 
@@ -11,24 +18,6 @@ class Cotizador extends BaseController
 {
     public function index()
     {
-        try {
-            $firebase = new FirebaseService();
-            
-            $titulo = "Prueba de Notificación";
-            $mensaje = "¡El servicio de Firebase funciona correctamente!";
-            
-            $tokensDePrueba = ['dKSOFl4gSae8H7MGWb8E_X:APA91bFjU7zPO0Rjxhkd1DQxAVwjxPTz7mbSzqZLJFP_QXfY3W5-Dav8BTDdUaKzVthFcXe9ZiOOu2herw4BnzArzLCffgv5NM1XurJp1x2sV5TEG3s4GDA'];
-
-            if (!empty($tokensDePrueba[0])) {
-                $firebase->sendNotification($titulo, $mensaje, $tokensDePrueba);
-                log_message('info', 'Notificación de prueba enviada.');
-            }
-
-        } catch (\Exception $e) {
-            // Si la configuración de FirebaseService falla (ej: no encuentra el archivo JSON),
-            // se registrará aquí. Revisa writable/logs/
-            log_message('error', 'Error al inicializar FirebaseService: ' . $e->getMessage());
-        }
         $servicioModel = new ServicioModel();
         $data['servicios'] = $servicioModel->findAll();
         return view('public/cotizador_view', $data);
@@ -93,7 +82,6 @@ class Cotizador extends BaseController
             return $this->response->setStatusCode(403, 'Forbidden');
         }
 
-        // --- 1. CÁLCULO DEL COSTO BASE (Tu lógica fiable) ---
         $postData = $this->request->getPost();
         $cantidadInvitados = (int)($postData['cantidad_invitados'] ?? 1);
         $serviciosSeleccionadosIds = $postData['servicios'] ?? [];
@@ -101,7 +89,7 @@ class Cotizador extends BaseController
         $costoBase = 0;
         
         if (!empty($serviciosSeleccionadosIds)) {
-            $servicioModel = new \App\Models\ServicioModel();
+            $servicioModel = new ServicioModel();
             $serviciosInfo = $servicioModel->whereIn('id', $serviciosSeleccionadosIds)->findAll();
             foreach ($serviciosInfo as $servicio) {
                 if ($cantidadInvitados < $servicio['min_personas']) continue;
@@ -115,59 +103,15 @@ class Cotizador extends BaseController
             }
         }
 
-        // --- 2. RECOPILAR DATOS DE PREGUNTAS ABIERTAS PARA IA ---
-        $notasLogistica = "Dificultad de montaje: " . ($postData['dificultad_montaje'] ?? 'No especificada') . "\n";
-        $notasLogistica .= "Requisitos adicionales: " . ($postData['requisitos_adicionales'] ?? 'Ninguno') . "\n";
-        $notasLogistica .= "Otros servicios no listados: " . ($postData['servicios_otros'] ?? 'Ninguno') . "\n";
-        $notasLogistica .= "Mesa y mantel (detalle 'otro'): " . ($postData['mesa_mantel_otro'] ?? 'No aplica') . "\n";
-        $notasLogistica .= "Restricciones alimenticias: " . ($postData['restricciones'] ?? 'Ninguna') . "\n";
+        $logisticsService = new LogisticsAIService();
 
-
-        // esta esta por ser cambiado por la libreria de PHP-ML ignorar
-        // --- 3. LLAMADA ENFOCADA A GEMINI ---
-        $apiKey = "AIzaSyCWI88ZVXHIpuYj2OsR_Hk35jbgKh6HdFs"; 
-        $costoAdicionalIA = 0;
-        $justificacionIA = 'Sin costos adicionales por logística.';
-
-        // Solo llamar a la IA si hay notas relevantes
-        if (trim(str_replace('No especificada', '', str_replace('Ninguno', '', str_replace('No aplica', '', $notasLogistica))))) {
-            
-            $system_instruction = "Eres un analista de costos de logística para una empresa de catering. Te daré un costo base de un evento y notas del cliente. Tu ÚNICA tarea es estimar el costo ADICIONAL en Pesos Mexicanos (MXN) basado en las complejidades logísticas descritas. Tu respuesta DEBE ser un objeto JSON con dos claves: 'costo_adicional' (un número, sin comas ni símbolos) y 'justificacion' (un texto breve explicando el porqué del costo). Si no hay complejidad, devuelve 0 en 'costo_adicional'. Ejemplo de respuesta: {\"costo_adicional\": 500, \"justificacion\": \"Costo por montaje en segundo piso y necesidad de extensión eléctrica.\"}";
-            
-            $user_prompt = "Costo base del evento: $" . number_format($costoBase, 2) . " MXN para " . $cantidadInvitados . " invitados.\n";
-            $user_prompt .= "Analiza las siguientes notas logísticas y de requisitos:\n" . $notasLogistica;
-
-            $payload = [
-                'contents' => [['parts' => [['text' => $user_prompt]]]],
-                'system_instruction' => ['parts' => [['text' => $system_instruction]]],
-                'generationConfig' => ['response_mime_type' => 'application/json'] // ¡Pedimos JSON directamente!
-            ];
-            
-            try {
-                $client = \Config\Services::curlrequest(['timeout' => 20]);
-                $apiResponse = $client->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $apiKey, [
-                    'json' => $payload,
-                    'http_errors' => false
-                ]);
-
-                if ($apiResponse->getStatusCode() == 200) {
-                    $responseBody = json_decode($apiResponse->getBody(), true);
-                    $iaResponseText = $responseBody['candidates'][0]['content']['parts'][0]['text'] ?? '{}';
-                    $iaData = json_decode($iaResponseText, true);
-
-                    $costoAdicionalIA = (float)($iaData['costo_adicional'] ?? 0);
-                    $justificacionIA = $iaData['justificacion'] ?? 'No se pudo obtener justificación de la IA.';
-                }
-            } catch (\Exception $e) {
-                // No detenemos el proceso, solo registramos el error de la IA
-                log_message('error', 'Error en la llamada a Gemini: ' . $e->getMessage());
-                $justificacionIA = 'Error de conexión con el servicio de IA. Se requiere revisión manual.';
-            }
-        }
+        $prediction = $logisticsService->predict($postData);
+        $costoAdicionalIA = $prediction['costo'];
+        $justificacionIA = $prediction['justificacion'];
         
-        // --- 4. GUARDAR TODO EN LA BASE DE DATOS ---
-        $cotizacionModel = new \App\Models\CotizacionModel();
-        $cotizacionServiciosModel = new \App\Models\CotizacionServiciosModel();
+        // --- GUARDAR TODO EN LA BASE DE DATOS ---
+        $cotizacionModel = new CotizacionModel();
+        $cotizacionServiciosModel = new CotizacionServiciosModel();
 
         $datosCotizacion = [
             // Datos del cliente
@@ -206,12 +150,18 @@ class Cotizador extends BaseController
         ];
 
         // Usamos una transacción para asegurar la integridad de los datos
-        $db = \Config\Database::connect();
+        $db = db_connect();
         $db->transStart();
         
         $cotizacionId = $cotizacionModel->insert($datosCotizacion, true);
 
-        if ($cotizacionId && !empty($serviciosSeleccionadosIds)) {
+        if (!$cotizacionId) {
+            $db->transComplete();
+            return $this->response->setStatusCode(500)->setJSON(['status' => 'error', 'message' => 'Fallo al insertar la cotización principal.']);
+        }
+
+        $serviciosSeleccionadosIds = $postData['servicios'] ?? [];
+        if (!empty($serviciosSeleccionadosIds)) {
             foreach ($serviciosSeleccionadosIds as $servicioId) {
                 $cotizacionServiciosModel->insert([
                     'cotizacion_id' => $cotizacionId,
@@ -219,14 +169,65 @@ class Cotizador extends BaseController
                 ]);
             }
         }
-        
+
         $db->transComplete();
-        
+
         if ($db->transStatus() === false) {
-            return $this->response->setStatusCode(500)->setJSON(['error' => 'No se pudo guardar la cotización. Por favor, intenta de nuevo.']);
+            return $this->response->setStatusCode(500)->setJSON(['status' => 'error', 'message' => 'No se pudo guardar la cotización en la base de datos.']);
         }
 
-        return $this->response->setJSON(['success' => true, 'message' => '¡Cotización enviada con éxito! Nos pondremos en contacto contigo a la brevedad.']);
+        $nombreCliente = $postData['nombre_completo'] ?? 'un cliente';
+        
+        $title = "Nueva Cotización Recibida";
+        $body = "De: $nombreCliente. Toca para ver los detalles.";
+        $notificationPayload = [
+            'action_url' => "/cotizaciones/{$cotizacionId}",
+            'notification_type' => 'nueva_cotizacion',
+            // El 'data' para el push debe ser un mapa de strings
+            'push_data' => [
+                'type' => 'nueva_cotizacion',
+                'cotizacion_id' => (string)$cotizacionId
+            ]
+        ];
+
+        $userModel = new UsuarioModel();
+        $admins = $userModel->findAll(); 
+
+        if (!empty($admins)) {
+            $notificationModel = new NotificationModel();
+
+            foreach ($admins as $admin) {
+                $notificationModel->insert([
+                    'user_id'           => $admin['id'], // El ID del admin
+                    'title'             => $title,
+                    'body'              => $body,
+                    'is_read'           => 0, // Por defecto no leída
+                    'action_url'        => $notificationPayload['action_url'],
+                    'notification_type' => $notificationPayload['notification_type']
+                ]);
+            }
+
+        }
+
+        try {
+            $firebase = new FirebaseService();
+            $firebase->sendToTopic(
+                'admins', // El topic de todos los administradores
+                $title,
+                $body,
+                $notificationPayload['push_data']
+            );
+            log_message('info', 'Notificación Push enviada al topic "admins".');
+        } catch (\Exception $e) {
+            log_message('error', 'Fallo al enviar notificación Push al topic: ' . $e->getMessage());
+            // No detenemos el proceso, solo lo registramos. La notificación ya está en la DB.
+        }
+
+        return $this->response->setJSON([
+            'success' => true, 
+            'message' => '¡Cotización enviada con éxito!', 
+            'cotizacion_id' => $cotizacionId
+        ])->setStatusCode(201);
     }
 
     public function fechasOcupadas()

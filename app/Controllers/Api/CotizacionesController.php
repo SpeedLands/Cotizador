@@ -94,10 +94,6 @@ class CotizacionesController extends BaseController
                 }
             }
         }
-        
-        $notasLogistica = "Dificultad de montaje: " . ($json['dificultad_montaje'] ?? 'No especificada') . "\n";
-        $notasLogistica .= "Requisitos adicionales: " . ($json['requisitos_adicionales'] ?? 'Ninguno') . "\n";
-        $notasLogistica .= "Otros servicios no listados: " . ($json['servicios_otros'] ?? 'Ninguno') . "\n";
 
         $logisticsService = new LogisticsAIService();
 
