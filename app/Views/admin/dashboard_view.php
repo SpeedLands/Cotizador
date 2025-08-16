@@ -7,9 +7,9 @@
         <p class="text-muted">¡Bienvenido de nuevo, <?= esc(session()->get('nombre_usuario')) ?>! Este es el resumen de tu negocio.</p>
     </div>
 
-    <div class="row">
+        <div class="row">
         <!-- Tarjeta: Cotizaciones Pendientes -->
-        <div class="col-md-6 col-lg-4 mb-4">
+        <div class="col-md-6 col-lg-3 mb-4">
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body">
                     <div class="d-flex align-items-center">
@@ -19,19 +19,16 @@
                             </div>
                         </div>
                         <div class="flex-grow-1">
-                            <h5 class="card-title text-muted mb-1">Cotizaciones Pendientes</h5>
+                            <h5 class="card-title text-muted mb-1">Pendientes</h5>
                             <p class="card-text h2 mb-0"><?= esc($pendientes) ?></p>
                         </div>
                     </div>
                 </div>
-                <div class="card-footer bg-white border-0 pt-0">
-                    <a href="<?= site_url('admin/cotizaciones?filtro=pendiente') ?>" class="text-warning stretched-link">Ver todas »</a>
-                </div>
             </div>
         </div>
 
-        <!-- Tarjeta: Eventos Confirmados -->
-        <div class="col-md-6 col-lg-4 mb-4">
+        <!-- Tarjeta: Eventos Confirmados (Mes) -->
+        <div class="col-md-6 col-lg-3 mb-4">
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body">
                     <div class="d-flex align-items-center">
@@ -41,7 +38,7 @@
                             </div>
                         </div>
                         <div class="flex-grow-1">
-                            <h5 class="card-title text-muted mb-1">Eventos Confirmados (Mes)</h5>
+                            <h5 class="card-title text-muted mb-1">Confirmados (Mes)</h5>
                             <p class="card-text h2 mb-0"><?= esc($confirmadas_mes) ?></p>
                         </div>
                     </div>
@@ -49,8 +46,8 @@
             </div>
         </div>
         
-        <!-- Tarjeta: Ingresos Confirmados -->
-        <div class="col-lg-4 mb-4">
+        <!-- Tarjeta: Ingresos del Mes -->
+        <div class="col-md-6 col-lg-3 mb-4">
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body">
                     <div class="d-flex align-items-center">
@@ -60,8 +57,30 @@
                             </div>
                         </div>
                         <div class="flex-grow-1">
-                            <h5 class="card-title text-muted mb-1">Ingresos del Mes</h5>
+                            <h5 class="card-title text-muted mb-1">Ingresos (Mes)</h5>
                             <p class="card-text h2 mb-0">$<?= number_format($ingresos_mes, 2) ?></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================================================== -->
+        <!-- ==         ¡AQUÍ ESTÁ LA NUEVA TARJETA!         == -->
+        <!-- ================================================== -->
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0 me-3">
+                             <div class="bg-info text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                                <i class="bi bi-bullseye fs-4"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h5 class="card-title text-muted mb-1">Tasa de Conversión</h5>
+                            <p class="card-text h2 mb-0"><?= number_format($kpi_conversion['tasa'], 1) ?>%</p>
+                            <small class="text-muted"><?= $kpi_conversion['confirmadas'] ?> de <?= $kpi_conversion['total'] ?></small>
                         </div>
                     </div>
                 </div>
@@ -146,6 +165,36 @@
         </div>
     </div>
 
+    <div class="row">
+        <!-- Gráfica: Canal de Origen -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Canal de Origen de Clientes</h5>
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    <div style="position: relative; height:250px; width:250px">
+                        <canvas id="graficaCanalOrigen"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráfica: Tipo de Evento -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Distribución por Tipo de Evento</h5>
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    <div style="position: relative; height:250px; width:250px">
+                        <canvas id="graficaTipoEvento"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
@@ -216,6 +265,114 @@
                 }
             }
         });
+
+        const datosCanalOrigen = <?= $stats_canal_origen_json ?>;
+        const ctxCanal = document.getElementById('graficaCanalOrigen');
+
+        if (ctxCanal && datosCanalOrigen.data.length > 0) {
+            new Chart(ctxCanal, {
+                type: 'doughnut', // Gráfica de dona
+                data: {
+                    labels: datosCanalOrigen.labels,
+                    datasets: [{
+                        data: datosCanalOrigen.data,
+                        backgroundColor: [ // Paleta de colores atractiva
+                            '#4e73df', 
+                            '#1cc88a', 
+                            '#36b9cc', 
+                            '#f6c23e', 
+                            '#e74a3b',
+                            '#858796'
+                        ],
+                        hoverBackgroundColor: [
+                            '#2e59d9', 
+                            '#17a673', 
+                            '#2c9faf', 
+                            '#dda20a', 
+                            '#be2617',
+                            '#60616f'
+                        ],
+                        hoverBorderColor: "rgba(234, 236, 244, 1)",
+                    }],
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom', // Mover las etiquetas abajo
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    let value = context.raw || 0;
+                                    let total = context.chart.getDatasetMeta(0).total;
+                                    let percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                },
+            });
+        } else if (ctxCanal) {
+            // Mensaje si no hay datos
+            ctxCanal.getContext('2d').fillText("No hay datos de origen para mostrar.", 10, 50);
+        }
+
+        const datosTipoEvento = <?= $stats_tipo_evento_json ?>;
+        const ctxTipoEvento = document.getElementById('graficaTipoEvento');
+
+        if (ctxTipoEvento && datosTipoEvento.data.length > 0) {
+            new Chart(ctxTipoEvento, {
+                type: 'doughnut',
+                data: {
+                    labels: datosTipoEvento.labels,
+                    datasets: [{
+                        data: datosTipoEvento.data,
+                        backgroundColor: [ // Usamos una paleta de colores similar para consistencia
+                            '#4e73df', 
+                            '#1cc88a', 
+                            '#36b9cc', 
+                            '#f6c23e', 
+                            '#e74a3b'
+                        ],
+                        hoverBackgroundColor: [
+                            '#2e59d9', 
+                            '#17a673', 
+                            '#2c9faf', 
+                            '#dda20a', 
+                            '#be2617'
+                        ],
+                        hoverBorderColor: "rgba(234, 236, 244, 1)",
+                    }],
+                },
+                options: { // Reutilizamos las mismas opciones para un look consistente
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    let value = context.raw || 0;
+                                    let total = context.chart.getDatasetMeta(0).total;
+                                    let percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                },
+            });
+        } else if (ctxTipoEvento) {
+            ctxTipoEvento.getContext('2d').fillText("No hay datos de eventos para mostrar.", 10, 50);
+        }
+
     });
 </script>
 

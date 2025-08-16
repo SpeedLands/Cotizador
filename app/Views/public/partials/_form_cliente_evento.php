@@ -46,8 +46,9 @@
 <div class="row">
     <div class="col-md-6 mb-3">
         <label for="fecha_evento" class="form-label">Día del Evento</label>
-        <input type="date" name="fecha_evento" id="fecha_evento" class="form-control" 
-            value="<?= esc($cotizacion['fecha_evento'] ?? '') ?>" required>
+        <input type="text" name="fecha_evento" id="fecha_evento" class="form-control" 
+               placeholder="Selecciona una fecha..."
+               value="<?= esc($cotizacion['fecha_evento'] ?? '') ?>" required>
         <div id="fecha-error-mensaje" class="text-danger mt-1" style="display: none;"></div>
     </div>
     <div class="col-md-6 mb-3">

@@ -10,8 +10,8 @@ class Cotizaciones extends BaseController
     {
         $cotizacionModel = new CotizacionModel();
         
-        // Obtenemos todas las cotizaciones, ordenadas por la más reciente primero
-        $data['cotizaciones'] = $cotizacionModel->orderBy('fecha_creacion', 'DESC')->findAll();
+        // Obtenemos todas las cotizaciones, ordenadas por la fecha del evento
+        $data['cotizaciones'] = $cotizacionModel->orderBy('fecha_evento', 'ASC')->findAll();
 
         $data['titulo'] = 'Listado de Cotizaciones'; // Para el título de la página
 
@@ -96,6 +96,7 @@ class Cotizaciones extends BaseController
     {
         $cotizacionModel = new CotizacionModel();
         $servicioModel = new \App\Models\ServicioModel();
+        $cotizacionServiciosModel = new \App\Models\CotizacionServiciosModel();
 
         $data['cotizacion'] = $cotizacionModel->find($id);
         if (empty($data['cotizacion'])) {
@@ -104,15 +105,19 @@ class Cotizaciones extends BaseController
 
         // Pasamos todos los servicios para que el formulario se pueda construir
         $data['servicios'] = $servicioModel->findAll();
-        
-        // También pasamos los IDs de los servicios que ya están seleccionados
-        $db = \Config\Database::connect();
-        $builder = $db->table('cotizacion_servicios');
-        $builder->select('servicio_id');
-        $builder->where('cotizacion_id', $id);
-        $query = $builder->get()->getResultArray();
-        // `array_column` es una forma útil de obtener solo los valores de una columna
-        $data['servicios_seleccionados_ids'] = array_column($query, 'servicio_id');
+
+        $serviciosSeleccionados = $cotizacionServiciosModel->where('cotizacion_id', $id)->findAll();
+        $data['servicios_seleccionados_ids'] = array_column($serviciosSeleccionados, 'servicio_id');
+
+        $fechasDb = $cotizacionModel->select('fecha_evento')
+                                    ->where('status', 'Confirmado')
+                                    ->findAll();
+        $fechasOcupadas = array_column($fechasDb, 'fecha_evento');
+        $fechaActualDeLaCotizacion = $data['cotizacion']['fecha_evento'];
+        $fechasFiltradas = array_filter($fechasOcupadas, function ($fecha) use ($fechaActualDeLaCotizacion) {
+            return $fecha !== $fechaActualDeLaCotizacion;
+        });
+        $data['fechas_deshabilitadas_json'] = json_encode(array_values($fechasFiltradas));
 
         $data['titulo'] = 'Editando Cotización #' . $id;
         return view('admin/cotizaciones/editar_view', $data);
@@ -120,10 +125,6 @@ class Cotizaciones extends BaseController
 
     public function actualizar()
     {
-        // if ($this->request->getMethod() !== 'post') {
-        //     return redirect()->to(site_url('admin/cotizaciones'));
-        // }
-
         $id = $this->request->getPost('cotizacion_id');
         $postData = $this->request->getPost();
 
@@ -131,25 +132,83 @@ class Cotizaciones extends BaseController
             return redirect()->back()->with('error', 'ID de cotización no válido.');
         }
 
-        // Preparamos los datos para la tabla principal `cotizaciones`
-        // (Omitimos los datos de costos, ya que esos no deberían editarse manualmente aquí)
-        $datosCotizacion = [
-            'nombre_completo' => $postData['nombre_completo'],
-            'whatsapp' => $postData['whatsapp'],
-            // ... (campos del formulario que se puedan actualizar)
-        ];
-
-        // Preparamos los datos de los servicios seleccionados
+        $cantidadInvitados = (int)($postData['cantidad_invitados'] ?? 1);
         $serviciosSeleccionadosIds = $postData['servicios'] ?? [];
+        
+        // Recalculamos los litros basados en la regla de negocio
+        $litrosAgua = ceil($cantidadInvitados / 6);
+        
+        $costoBase = 0;
+        
+        if (!empty($serviciosSeleccionadosIds)) {
+            $servicioModel = new \App\Models\ServicioModel();
+            $serviciosInfo = $servicioModel->whereIn('id', $serviciosSeleccionadosIds)->findAll();
+            
+            foreach ($serviciosInfo as $servicio) {
+                // Omitir servicios que no cumplen el mínimo de personas
+                if ($cantidadInvitados < $servicio['min_personas']) continue;
+
+                switch ($servicio['tipo_cobro']) {
+                    case 'por_persona':
+                        $costoBase += $servicio['precio_base'] * $cantidadInvitados;
+                        break;
+                    case 'por_litro':
+                        $costoBase += $servicio['precio_base'] * $litrosAgua;
+                        break;
+                    default: // 'fijo'
+                        $costoBase += $servicio['precio_base'];
+                        break;
+                }
+            }
+        }
+
+        $logisticsService = new \App\Libraries\LogisticsAIService();
+        $prediction = $logisticsService->predict($postData);
+        $costoAdicionalIA = $prediction['costo'];
+        $justificacionIA = $prediction['justificacion'];
+
+        $datosCotizacion = [
+            // Datos del cliente y evento (_form_cliente_evento)
+            'nombre_completo'    => $postData['nombre_completo'] ?? null,
+            'whatsapp'           => $postData['whatsapp'] ?? null,
+            'tipo_evento'        => $postData['tipo_evento'] ?? null,
+            'nombre_empresa'     => $postData['nombre_empresa'] ?? null,
+            'direccion_evento'   => $postData['direccion_evento'] ?? null,
+            'fecha_evento'       => $postData['fecha_evento'] ?? null,
+            'hora_evento'        => $postData['hora_evento'] ?? null,
+            'horario_consumo'    => $postData['horario_consumo'] ?? null,
+            
+            // Datos de servicios (_form_servicios)
+            'cantidad_invitados' => $cantidadInvitados,
+            'servicios_otros'    => $postData['servicios_otros'] ?? null,
+
+            // Detalles finales (_form_detalles_finales)
+            'como_supiste'          => $postData['como_supiste'] ?? null,
+            'como_supiste_otro'     => $postData['como_supiste_otro'] ?? null,
+            'mesa_mantel'           => $postData['mesa_mantel'] ?? null,
+            'mesa_mantel_otro'      => $postData['mesa_mantel_otro'] ?? null,
+            'personal_servicio'     => $postData['personal_servicio'] ?? null,
+            'acceso_enchufe'        => $postData['acceso_enchufe'] ?? null,
+            'dificultad_montaje'    => $postData['dificultad_montaje'] ?? null,
+            'tipo_consumidores'     => $postData['tipo_consumidores'] ?? null,
+            'restricciones'         => $postData['restricciones'] ?? null,
+            'requisitos_adicionales'=> $postData['requisitos_adicionales'] ?? null,
+            'presupuesto'           => $postData['presupuesto'] ?? null,
+
+            // Costos Recalculados
+            'total_base'         => $costoBase,
+            'costo_adicional_ia' => $costoAdicionalIA,
+            'justificacion_ia'   => $justificacionIA,
+            'total_estimado'     => $costoBase + $costoAdicionalIA,
+        ];
 
         $cotizacionModel = new CotizacionModel();
         $cotizacionServiciosModel = new \App\Models\CotizacionServiciosModel();
         $db = \Config\Database::connect();
 
-        // Usamos una transacción para garantizar que todo se ejecute correctamente o nada lo haga.
         $db->transStart();
 
-        // 1. Actualizar la tabla principal de cotizaciones
+        // 1. Actualizar la tabla principal `cotizaciones` con todos los nuevos datos
         $cotizacionModel->update($id, $datosCotizacion);
 
         // 2. Borrar las entradas antiguas de servicios para esta cotización

@@ -10,43 +10,60 @@
 <div class="mb-3">
     <label class="form-label fw-bold">¿Qué Gustas en tu Cotización?</label>
     
+    <!-- SECCIÓN DE SERVICIOS REGULARES (CHECKBOXES) -->
     <?php foreach ($servicios as $servicio): ?>
-        <div class="servicio-item" id="item-<?= $servicio['id'] ?>">
-            <input class="form-check-input me-3 servicio-checkbox" 
-                   type="checkbox" 
-                   name="servicios[]" 
-                   value="<?= $servicio['id'] ?>" 
-                   id="servicio_<?= $servicio['id'] ?>"
-                   data-min-personas="<?= $servicio['min_personas'] ?? 1 ?>"
-                   data-tipo-cobro="<?= $servicio['tipo_cobro'] ?? 'fijo' ?>"
-                   data-nombre-clave="<?= strtolower(str_replace(' ', '_', $servicio['nombre'])) ?>"
-                   
-                   <?php // --- LÓGICA PARA MARCAR EL CHECKBOX ---
-                         // Comprueba si la variable con los IDs seleccionados existe Y si el ID del servicio actual está en ese array.
-                         if (isset($servicios_seleccionados_ids) && in_array($servicio['id'], $servicios_seleccionados_ids)) {
-                             echo 'checked';
-                         }
-                   ?>
-            >
-            
-            <label class="form-check-label flex-grow-1" for="servicio_<?= $servicio['id'] ?>">
-                <strong><?= htmlspecialchars($servicio['nombre']) ?></strong>
-                <?php if (isset($servicio['min_personas']) && $servicio['min_personas'] > 1): ?>
-                    <small class="d-block text-muted">Mínimo <?= $servicio['min_personas'] ?> invitados.</small>
-                <?php endif; ?>
-            </label>
+        <?php if (strpos($servicio['nombre'], 'Modalidad:') === false): // Si NO es una modalidad ?>
+            <div class="servicio-item" id="item-<?= $servicio['id'] ?>">
+                <input class="form-check-input me-3 servicio-checkbox" 
+                       type="checkbox" 
+                       name="servicios[]" 
+                       value="<?= $servicio['id'] ?>" 
+                       id="servicio_<?= $servicio['id'] ?>"
+                       data-min-personas="<?= $servicio['min_personas'] ?? 1 ?>"
+                       data-tipo-cobro="<?= $servicio['tipo_cobro'] ?? 'fijo' ?>"
+                       data-precio-base="<?= $servicio['precio_base'] ?>"
+                       data-nombre-clave="<?= strtolower(str_replace(' ', '_', $servicio['nombre'])) ?>"
+                       <?= (isset($servicios_seleccionados_ids) && in_array($servicio['id'], $servicios_seleccionados_ids)) ? 'checked' : '' ?>
+                >
+                <label class="form-check-label flex-grow-1" for="servicio_<?= $servicio['id'] ?>">
+                    <strong><?= htmlspecialchars($servicio['nombre']) ?></strong>
+                    <?php if (isset($servicio['min_personas']) && $servicio['min_personas'] > 1): ?>
+                        <small class="d-block text-muted">Mínimo <?= $servicio['min_personas'] ?> invitados.</small>
+                    <?php endif; ?>
+                </label>
+            </div>
+        <?php endif; ?>
+    <?php endforeach; ?>
 
-            <?php if (isset($servicio['tipo_cobro']) && $servicio['tipo_cobro'] == 'por_litro'): ?>
-                <?php
-                    // Comprobamos si este servicio estaba seleccionado para decidir si mostramos el campo de litros
-                    $isBebidaSelected = isset($servicios_seleccionados_ids) && in_array($servicio['id'], $servicios_seleccionados_ids);
-                ?>
-                <input type="number" name="litros_agua" class="form-control form-control-sm ms-2 <?= $isBebidaSelected ? '' : 'campo-oculto' ?>" 
-                       style="width: 100px;" placeholder="Litros" min="1"
-                       id="litros_servicio_<?= $servicio['id'] ?>"
-                       value="<?= esc($cotizacion['litros_agua'] ?? '') ?>"> 
-            <?php endif; ?>
-        </div>
+    <!-- SECCIÓN DE MODALIDADES (RADIO BUTTONS) -->
+    <label class="form-label fw-bold mt-4">Modalidad del Servicio</label>
+    <?php foreach ($servicios as $servicio): ?>
+        <?php if (strpos($servicio['nombre'], 'Modalidad:') !== false): // Si SÍ es una modalidad ?>
+            <div class="servicio-item" id="item-<?= $servicio['id'] ?>">
+                <input class="form-check-input me-3 modalidad-radio" 
+                       type="radio" 
+                       name="servicios[]"  
+                       value="<?= $servicio['id'] ?>" 
+                       id="servicio_<?= $servicio['id'] ?>"
+                       data-tipo-cobro="fijo"
+                       data-precio-base="<?= $servicio['precio_base'] ?>"
+                       
+                       <?php // --- LÓGICA PARA MARCAR POR DEFECTO ---
+                             // Si el precio es 0, lo marcamos por defecto.
+                             if ($servicio['precio_base'] == 0) { echo 'checked'; }
+                       ?>
+                >
+                <label class="form-check-label flex-grow-1" for="servicio_<?= $servicio['id'] ?>">
+                    <!-- Quitamos el prefijo "Modalidad:" para que se vea más limpio -->
+                    <strong><?= htmlspecialchars(str_replace('Modalidad: ', '', $servicio['nombre'])) ?></strong>
+                    <?php if ($servicio['precio_base'] > 0): ?>
+                        <small class="d-block text-success">(Costo adicional)</small>
+                    <?php else: ?>
+                        <small class="d-block text-muted">(Opción estándar)</small>
+                    <?php endif; ?>
+                </label>
+            </div>
+        <?php endif; ?>
     <?php endforeach; ?>
 
     <div class="mt-2">

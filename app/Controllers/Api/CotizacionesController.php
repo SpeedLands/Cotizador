@@ -77,7 +77,7 @@ class CotizacionesController extends BaseController
 
         $cantidadInvitados = (int)($json['cantidad_invitados'] ?? 1);
         $serviciosSeleccionadosIds = $json['servicios'] ?? [];
-        $litrosAgua = (int)($json['litros_agua'] ?? 0);
+        $litrosAgua = ceil($cantidadInvitados / 6);
         $costoBase = 0;
         
         if (!empty($serviciosSeleccionadosIds)) {

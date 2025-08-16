@@ -23,3 +23,34 @@
         </div>
     </form>
 <?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. Obtenemos las fechas que el controlador nos pasó
+    const fechasOcupadas = <?= $fechas_deshabilitadas_json ?>;
+    
+    const fechaInput = document.getElementById('fecha_evento');
+
+    if (fechaInput) {
+        // 2. Inicializamos Flatpickr con las reglas para el admin
+        flatpickr(fechaInput, {
+            locale: "es",
+            dateFormat: "Y-m-d",
+            altInput: true,
+            altFormat: "F j, Y",
+            
+            // No permite seleccionar fechas pasadas
+            minDate: "today", 
+            
+            // Deshabilita las fechas ocupadas (ya filtradas por el controlador)
+            disable: fechasOcupadas, 
+        });
+    }
+});
+</script>
+<?= $this->endSection() ?>

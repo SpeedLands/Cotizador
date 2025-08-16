@@ -12,17 +12,24 @@ class Dashboard extends BaseController
 
         // 1. Obtener los KPIs (Indicadores Clave)
         $data['pendientes'] = $cotizacionModel->contarPorEstado('Pendiente');
-        $data['confirmadas_mes'] = $this->contarConfirmadasMesActual($cotizacionModel); // Usaremos una función helper
+        $data['confirmadas_mes'] = $this->contarConfirmadasMesActual($cotizacionModel);
         $data['ingresos_mes'] = $cotizacionModel->ingresosConfirmadosPorMes(date('Y'), date('m'));
+        
+        // --- ¡AQUÍ AÑADIMOS EL NUEVO KPI! ---
+        $data['kpi_conversion'] = $cotizacionModel->getConversionRateKpi();
         
         // 2. Obtener las últimas 5 cotizaciones
         $data['ultimas_cotizaciones'] = $cotizacionModel->getUltimasCotizaciones(5);
 
-        $data['pendientes'] = $cotizacionModel->contarPorEstado('Pendiente');
-
+        // 3. Datos para la gráfica
         $data['grafica_ingresos'] = $cotizacionModel->getIngresosUltimosMeses(6);
-        // Pasamos los datos a la vista en formato JSON para que JavaScript pueda leerlos fácilmente
         $data['grafica_ingresos_json'] = json_encode($data['grafica_ingresos']);
+
+        $stats_canal_origen = $cotizacionModel->getStatsPorCanalOrigen();
+        $data['stats_canal_origen_json'] = json_encode($stats_canal_origen);
+
+        $stats_tipo_evento = $cotizacionModel->getStatsPorTipoEvento();
+        $data['stats_tipo_evento_json'] = json_encode($stats_tipo_evento);
 
         $data['titulo'] = 'Dashboard Principal';
 
