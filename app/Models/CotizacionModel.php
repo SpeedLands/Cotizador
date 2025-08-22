@@ -18,7 +18,7 @@ class CotizacionModel extends Model
         'tipo_consumidores', 'restricciones', 'requisitos_adicionales',
         'presupuesto', 'como_supiste', 'como_supiste_otro',
         'total_base', 'costo_adicional_ia', 'justificacion_ia',
-        'total_estimado', 'status'
+        'total_estimado', 'status', 'guest_token'
     ];
 
     // Habilitar timestamps

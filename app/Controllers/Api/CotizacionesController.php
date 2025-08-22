@@ -2,221 +2,206 @@
 
 namespace App\Controllers\Api;
 
-use App\Controllers\BaseController;
-use App\Models\ServicioModel;
-use App\Models\UsuarioModel;
-use App\Models\CotizacionModel;
-use App\Models\NotificationModel;
-use App\Models\CotizacionServiciosModel;
-use App\Libraries\FirebaseService;
-use App\Libraries\LogisticsAIService;
+use App\Traits\CotizacionLogicTrait;
+use CodeIgniter\RESTful\ResourceController;
 use Config\Services;
 
-class CotizacionesController extends BaseController
+class CotizacionesController extends ResourceController
 {
+    use CotizacionLogicTrait;
+
+    protected $modelName = 'App\Models\CotizacionModel';
+    protected $format    = 'json';
+
     /**
-     * Lista todas las cotizaciones.
-     * Ordena por fecha de creación descendente (las más nuevas primero).
+     * Lista TODAS las cotizaciones.
+     * ACCESO: Solo para administradores autenticados (protegido por el filtro 'api-auth' en las rutas).
      */
     public function index()
     {
-        $cotizacionModel = new CotizacionModel();
-        
-        // Usamos findAll() para obtener todas las cotizaciones.
-        // orderBy() las ordena para que las más recientes aparezcan primero.
-        $cotizaciones = $cotizacionModel->orderBy('created_at', 'DESC')->findAll();
+        $cotizaciones = $this->model->orderBy('fecha_evento', 'ASC')->findAll();
+        return $this->respond($cotizaciones);
+    }
 
-        if (empty($cotizaciones)) {
-            return $this->response->setJSON([
-                'status' => 'success',
-                'data' => [] // Devuelve un array vacío si no hay cotizaciones
-            ])->setStatusCode(200);
+    /**
+     * Muestra una cotización específica.
+     * ACCESO: Admins (con JWT) o Invitados (con Guest Token válido).
+     */
+    public function show($id = null)
+    {
+        $cotizacion = $this->model->find($id);
+        if (!$cotizacion) {
+            return $this->failNotFound('No se encontró la cotización con ID: ' . $id);
         }
 
-        return $this->response->setJSON([
-            'status' => 'success',
-            'data' => $cotizaciones
-        ])->setStatusCode(200);
+        // --- LÓGICA DE AUTORIZACIÓN ---
+        $isAdmin = auth()->id(); // Asumimos que tu helper de auth devuelve el ID si el JWT es válido.
+
+        if (!$isAdmin) {
+            // RUTA DEL INVITADO: No hay JWT, así que debe proporcionar un Guest Token.
+            if (empty($cotizacion['guest_token'])) {
+                return $this->failUnauthorized('Se requiere autenticación para acceder a este recurso.');
+            }
+
+            $tokenEnviado = $this->request->getHeaderLine('X-Guest-Token');
+            if ($tokenEnviado !== $cotizacion['guest_token']) {
+                return $this->failForbidden('Acceso no autorizado a esta cotización.');
+            }
+        }
+        // Si es Admin, el filtro 'api-auth' ya le dio acceso, así que puede continuar.
+
+        // --- LÓGICA DE LA RESPUESTA (si la autorización pasó) ---
+        $db = db_connect();
+        $builder = $db->table('cotizacion_servicios cs');
+        $builder->select('s.id, s.nombre, s.precio_base, s.tipo_cobro');
+        $builder->join('servicios s', 's.id = cs.servicio_id');
+        $builder->where('cs.cotizacion_id', $id);
+        $cotizacion['servicios_seleccionados'] = $builder->get()->getResultArray();
+
+        return $this->respond($cotizacion);
     }
 
-
-    public function fechasOcupadas()
-    {
-        $cotizacionModel = new CotizacionModel();
-        $fechasDb = $cotizacionModel->select('fecha_evento')
-                                    ->where('status', 'Confirmado')
-                                    ->findAll();
-        $fechasOcupadas = array_column($fechasDb, 'fecha_evento');
-
-        return $this->response->setJSON($fechasOcupadas);
-    }
-
-    public function guardar()
+    /**
+     * Crea una nueva cotización para un invitado.
+     * ACCESO: Público. Devuelve un Guest Token para futuras ediciones.
+     */
+    public function create()
     {
         $json = $this->request->getJSON(true);
-
         if (empty($json)) {
-            return $this->response->setJSON(['status' => 'error', 'message' => 'No se recibió un payload JSON válido.'])->setStatusCode(400);
+            return $this->fail('No se recibió un payload JSON válido.', 400);
         }
 
+        // Validación de los datos de entrada
         $validation = Services::validation();
         $validation->setRules([
             'nombre_completo'     => 'required|min_length[3]',
             'whatsapp'            => 'required|min_length[10]',
             'fecha_evento'        => 'required|valid_date',
-            'hora_evento'         => 'required',
             'cantidad_invitados'  => 'required|is_natural_no_zero',
             'servicios'           => 'required|is_array'
         ]);
 
         if (!$validation->run($json)) {
-            return $this->response
-                        ->setJSON(['status' => 'error', 'message' => 'Datos inválidos.', 'errors' => $validation->getErrors()])
-                        ->setStatusCode(400);
+            return $this->fail($validation->getErrors(), 400);
         }
 
-        $cantidadInvitados = (int)($json['cantidad_invitados'] ?? 1);
-        $serviciosSeleccionadosIds = $json['servicios'] ?? [];
-        $litrosAgua = ceil($cantidadInvitados / 6);
-        $costoBase = 0;
-        
-        if (!empty($serviciosSeleccionadosIds)) {
-            $servicioModel = new ServicioModel();
-            $serviciosInfo = $servicioModel->whereIn('id', $serviciosSeleccionadosIds)->findAll();
-            foreach ($serviciosInfo as $servicio) {
-                if ($cantidadInvitados < $servicio['min_personas']) continue;
-                if ($servicio['tipo_cobro'] == 'por_persona') {
-                    $costoBase += (float)$servicio['precio_base'] * $cantidadInvitados;
-                } elseif ($servicio['tipo_cobro'] == 'por_litro') {
-                    $costoBase += (float)$servicio['precio_base'] * $litrosAgua;
-                } else {
-                    $costoBase += (float)$servicio['precio_base'];
-                }
+        // Generamos un token seguro y único para este invitado
+        $guestToken = bin2hex(random_bytes(32));
+        $json['guest_token'] = $guestToken;
+
+        // Usamos el Trait para procesar y guardar todo
+        $resultado = $this->_procesarYGuardarCotizacion($json);
+
+        if ($resultado['success']) {
+            // Devolvemos el ID y el Guest Token a la app móvil
+            return $this->respondCreated([
+                'status' => 'success',
+                'message' => $resultado['message'],
+                'cotizacion_id' => $resultado['id'],
+                'guest_token' => $guestToken
+            ]);
+        } else {
+            return $this->failServerError($resultado['message']);
+        }
+    }
+
+    /**
+     * Actualiza una cotización existente.
+     * ACCESO: Admins (con JWT) o Invitados (con Guest Token válido).
+     */
+    public function update($id = null)
+    {
+        $cotizacion = $this->model->find($id);
+        if (!$cotizacion) {
+            return $this->failNotFound('No se encontró la cotización con ID: ' . $id);
+        }
+
+        // --- LÓGICA DE AUTORIZACIÓN ---
+        $isAdmin = auth()->id();
+
+        if (!$isAdmin) {
+            // RUTA DEL INVITADO
+            if (empty($cotizacion['guest_token'])) {
+                return $this->failUnauthorized('Se requiere autenticación para modificar este recurso.');
+            }
+            $tokenEnviado = $this->request->getHeaderLine('X-Guest-Token');
+            if ($tokenEnviado !== $cotizacion['guest_token']) {
+                return $this->failForbidden('Acceso no autorizado para modificar esta cotización.');
             }
         }
+        // Si es Admin, puede continuar.
 
-        $logisticsService = new LogisticsAIService();
+        // --- LÓGICA DE ACTUALIZACIÓN (si la autorización pasó) ---
+        $json = $this->request->getJSON(true);
+        if (empty($json)) {
+            return $this->fail('No se recibió un payload JSON válido.', 400);
+        }
 
-        $prediction = $logisticsService->predict($json);
-        $costoAdicionalIA = $prediction['costo'];
-        $justificacionIA = $prediction['justificacion'];
+        $datosCotizacion = $this->_prepararDatosCotizacion($json);
         
-        
-        $cotizacionModel = new CotizacionModel();
-        $cotizacionServiciosModel = new CotizacionServiciosModel();
+        // Un admin puede cambiar el status, un invitado no debería.
+        if (isset($json['status']) && $isAdmin) {
+            $datosCotizacion['status'] = $json['status'];
+        }
 
-        $datosCotizacion = [
-            'nombre_completo' => $json['nombre_completo'] ?? null,
-            'whatsapp' => $json['whatsapp'] ?? null,
-            'como_supiste' => $json['como_supiste'] ?? null,
-            'como_supiste_otro' => $json['como_supiste_otro'] ?? null,
-            'tipo_evento' => $json['tipo_evento'] ?? null,
-            'nombre_empresa' => $json['nombre_empresa'] ?? null,
-            'direccion_evento' => $json['direccion_evento'] ?? null,
-            'fecha_evento' => $json['fecha_evento'] ?? null,
-            'hora_evento' => $json['hora_evento'] ?? null,
-            'horario_consumo' => $json['horario_consumo'] ?? null,
-            'cantidad_invitados' => $cantidadInvitados,
-            'servicios_otros' => $json['servicios_otros'] ?? null,
-            'mesa_mantel' => $json['mesa_mantel'] ?? null,
-            'mesa_mantel_otro' => $json['mesa_mantel_otro'] ?? null,
-            'personal_servicio' => $json['personal_servicio'] ?? null,
-            'acceso_enchufe' => $json['acceso_enchufe'] ?? null,
-            'dificultad_montaje' => $json['dificultad_montaje'] ?? null,
-            'tipo_consumidores' => $json['tipo_consumidores'] ?? null,
-            'restricciones' => $json['restricciones'] ?? null,
-            'requisitos_adicionales' => $json['requisitos_adicionales'] ?? null,
-            'presupuesto' => $json['presupuesto'] ?? null,
-            'total_base' => $costoBase,
-            'costo_adicional_ia' => $costoAdicionalIA,
-            'justificacion_ia' => $justificacionIA,
-            'total_estimado' => $costoBase + $costoAdicionalIA,
-            'status' => 'Pendiente'
-        ];
-
+        $cotizacionServiciosModel = new \App\Models\CotizacionServiciosModel();
+        $serviciosSeleccionadosIds = $json['servicios'] ?? [];
         $db = db_connect();
+
         $db->transStart();
-        
-        $cotizacionId = $cotizacionModel->insert($datosCotizacion, true);
-
-        if (!$cotizacionId) {
-            $db->transComplete(); // Finalizamos la transacción fallida
-            return $this->response->setStatusCode(500)->setJSON(['status' => 'error', 'message' => 'Fallo al insertar la cotización principal.']);
-        }
-
-        $serviciosSeleccionadosIds = $json['servicios'] ?? [];
+        $this->model->update($id, $datosCotizacion);
+        $cotizacionServiciosModel->where('cotizacion_id', $id)->delete();
         if (!empty($serviciosSeleccionadosIds)) {
+            $nuevosServicios = [];
             foreach ($serviciosSeleccionadosIds as $servicioId) {
-                $cotizacionServiciosModel->insert([
-                    'cotizacion_id' => $cotizacionId,
-                    'servicio_id'   => $servicioId
-                ]);
+                $nuevosServicios[] = ['cotizacion_id' => $id, 'servicio_id' => $servicioId];
             }
+            $cotizacionServiciosModel->insertBatch($nuevosServicios);
         }
-        
         $db->transComplete();
-        
+
         if ($db->transStatus() === false) {
-             return $this->response->setStatusCode(500)->setJSON(['status' => 'error', 'message' => 'No se pudo guardar la cotización en la base de datos.']);
+            return $this->failServerError('Hubo un error al guardar los cambios.');
         }
 
-        $nombreCliente = $json['nombre_completo'] ?? 'un cliente';
-        
-        $title = "Nueva Cotización Recibida";
-        $body = "De: $nombreCliente. Toca para ver los detalles.";
-        
-        // Datos que se guardarán en la DB y se enviarán en el push
-        $notificationPayload = [
-            'action_url' => "/cotizaciones/{$cotizacionId}",
-            'notification_type' => 'nueva_cotizacion',
-            // El 'data' para el push debe ser un mapa de strings
-            'push_data' => [
-                'type' => 'nueva_cotizacion',
-                'cotizacion_id' => (string)$cotizacionId
-            ]
-        ];
+        return $this->respondUpdated(['status' => 'success', 'message' => 'Cotización actualizada correctamente.']);
+    }
 
-        // --- 3. GUARDADO DE NOTIFICACIONES EN LA BASE DE DATOS ---
-        // Obtenemos todos los usuarios (que son los admins)
-        $userModel = new UsuarioModel();
-        $admins = $userModel->findAll(); 
-
-        if (!empty($admins)) {
-            $notificationModel = new NotificationModel();
-            
-            // Creamos un registro de notificación para CADA administrador
-            foreach ($admins as $admin) {
-                $notificationModel->insert([
-                    'user_id'           => $admin['id'], // El ID del admin
-                    'title'             => $title,
-                    'body'              => $body,
-                    'is_read'           => 0, // Por defecto no leída
-                    'action_url'        => $notificationPayload['action_url'],
-                    'notification_type' => $notificationPayload['notification_type']
-                ]);
-            }
+    /**
+     * Elimina una cotización.
+     * ACCESO: Solo para administradores autenticados.
+     */
+    public function delete($id = null)
+    {
+        // Aunque la ruta está protegida, una doble verificación nunca está de más.
+        if (!auth()->id()) {
+            return $this->failUnauthorized('Solo los administradores pueden eliminar cotizaciones.');
         }
-        
-        // --- 4. ENVÍO DE LA NOTIFICACIÓN PUSH AL TOPIC ---
-        // Esto se hace una sola vez, después de guardar todo en la DB.
-        try {
-            $firebase = new FirebaseService();
-            $firebase->sendToTopic(
-                'admins', // El topic de todos los administradores
-                $title,
-                $body,
-                $notificationPayload['push_data']
-            );
-        } catch (\Exception $e) {
-            log_message('error', 'Fallo al enviar notificación Push al topic: ' . $e->getMessage());
-            // No detenemos el proceso, solo lo registramos. La notificación ya está en la DB.
-        }
-        
 
-        return $this->response->setJSON([
-            'status' => 'success', 
-            'message' => '¡Cotización enviada con éxito!', 
-            'cotizacion_id' => $cotizacionId
-        ])->setStatusCode(201);
+        $cotizacion = $this->model->find($id);
+        if (!$cotizacion) {
+            return $this->failNotFound('No se encontró la cotización con ID: ' . $id);
+        }
+
+        if ($this->model->delete($id)) {
+            return $this->respondDeleted(['status' => 'success', 'message' => 'Cotización eliminada correctamente.']);
+        } else {
+            return $this->failServerError('No se pudo eliminar la cotización.');
+        }
+    }
+
+    /**
+     * Devuelve las fechas confirmadas.
+     * ACCESO: Público.
+     */
+    public function fechasOcupadas()
+    {
+        $fechasDb = $this->model->select('fecha_evento')
+                                ->where('status', 'Confirmado')
+                                ->findAll();
+        $fechasOcupadas = array_column($fechasDb, 'fecha_evento');
+
+        return $this->respond($fechasOcupadas);
     }
 }

@@ -3,9 +3,12 @@ namespace App\Controllers\Admin;
 
 use App\Controllers\BaseController;
 use App\Models\CotizacionModel;
+use App\Traits\CotizacionLogicTrait;
 
 class Cotizaciones extends BaseController
 {
+    use CotizacionLogicTrait;
+
     public function index()
     {
         $cotizacionModel = new CotizacionModel();
@@ -132,75 +135,11 @@ class Cotizaciones extends BaseController
             return redirect()->back()->with('error', 'ID de cotización no válido.');
         }
 
-        $cantidadInvitados = (int)($postData['cantidad_invitados'] ?? 1);
-        $serviciosSeleccionadosIds = $postData['servicios'] ?? [];
-        
-        // Recalculamos los litros basados en la regla de negocio
-        $litrosAgua = ceil($cantidadInvitados / 6);
-        
-        $costoBase = 0;
-        
-        if (!empty($serviciosSeleccionadosIds)) {
-            $servicioModel = new \App\Models\ServicioModel();
-            $serviciosInfo = $servicioModel->whereIn('id', $serviciosSeleccionadosIds)->findAll();
-            
-            foreach ($serviciosInfo as $servicio) {
-                // Omitir servicios que no cumplen el mínimo de personas
-                if ($cantidadInvitados < $servicio['min_personas']) continue;
+        $datosCotizacion = $this->_prepararDatosCotizacion($postData);
 
-                switch ($servicio['tipo_cobro']) {
-                    case 'por_persona':
-                        $costoBase += $servicio['precio_base'] * $cantidadInvitados;
-                        break;
-                    case 'por_litro':
-                        $costoBase += $servicio['precio_base'] * $litrosAgua;
-                        break;
-                    default: // 'fijo'
-                        $costoBase += $servicio['precio_base'];
-                        break;
-                }
-            }
+        if (isset($postData['status'])) {
+            $datosCotizacion['status'] = $postData['status'];
         }
-
-        $logisticsService = new \App\Libraries\LogisticsAIService();
-        $prediction = $logisticsService->predict($postData);
-        $costoAdicionalIA = $prediction['costo'];
-        $justificacionIA = $prediction['justificacion'];
-
-        $datosCotizacion = [
-            // Datos del cliente y evento (_form_cliente_evento)
-            'nombre_completo'    => $postData['nombre_completo'] ?? null,
-            'whatsapp'           => $postData['whatsapp'] ?? null,
-            'tipo_evento'        => $postData['tipo_evento'] ?? null,
-            'nombre_empresa'     => $postData['nombre_empresa'] ?? null,
-            'direccion_evento'   => $postData['direccion_evento'] ?? null,
-            'fecha_evento'       => $postData['fecha_evento'] ?? null,
-            'hora_evento'        => $postData['hora_evento'] ?? null,
-            'horario_consumo'    => $postData['horario_consumo'] ?? null,
-            
-            // Datos de servicios (_form_servicios)
-            'cantidad_invitados' => $cantidadInvitados,
-            'servicios_otros'    => $postData['servicios_otros'] ?? null,
-
-            // Detalles finales (_form_detalles_finales)
-            'como_supiste'          => $postData['como_supiste'] ?? null,
-            'como_supiste_otro'     => $postData['como_supiste_otro'] ?? null,
-            'mesa_mantel'           => $postData['mesa_mantel'] ?? null,
-            'mesa_mantel_otro'      => $postData['mesa_mantel_otro'] ?? null,
-            'personal_servicio'     => $postData['personal_servicio'] ?? null,
-            'acceso_enchufe'        => $postData['acceso_enchufe'] ?? null,
-            'dificultad_montaje'    => $postData['dificultad_montaje'] ?? null,
-            'tipo_consumidores'     => $postData['tipo_consumidores'] ?? null,
-            'restricciones'         => $postData['restricciones'] ?? null,
-            'requisitos_adicionales'=> $postData['requisitos_adicionales'] ?? null,
-            'presupuesto'           => $postData['presupuesto'] ?? null,
-
-            // Costos Recalculados
-            'total_base'         => $costoBase,
-            'costo_adicional_ia' => $costoAdicionalIA,
-            'justificacion_ia'   => $justificacionIA,
-            'total_estimado'     => $costoBase + $costoAdicionalIA,
-        ];
 
         $cotizacionModel = new CotizacionModel();
         $cotizacionServiciosModel = new \App\Models\CotizacionServiciosModel();
@@ -208,14 +147,15 @@ class Cotizaciones extends BaseController
 
         $db->transStart();
 
-        // 1. Actualizar la tabla principal `cotizaciones` con todos los nuevos datos
         $cotizacionModel->update($id, $datosCotizacion);
 
-        // 2. Borrar las entradas antiguas de servicios para esta cotización
+        $cantidadInvitados = (int)($postData['cantidad_invitados'] ?? 1);
+        $serviciosSeleccionadosIds = $postData['servicios'] ?? [];
+
+        $serviciosSeleccionadosIds = $postData['servicios'] ?? [];
         $cotizacionServiciosModel->where('cotizacion_id', $id)->delete();
 
-        // 3. Insertar las nuevas entradas de servicios seleccionados (si las hay)
-        if (!empty($serviciosSeleccionadosIds)) {
+         if (!empty($serviciosSeleccionadosIds)) {
             $nuevosServicios = [];
             foreach ($serviciosSeleccionadosIds as $servicioId) {
                 $nuevosServicios[] = [
@@ -231,7 +171,7 @@ class Cotizaciones extends BaseController
         if ($db->transStatus() === false) {
             return redirect()->back()->with('error', 'Hubo un error al guardar los cambios.');
         }
-
+        
         return redirect()->to(site_url('admin/cotizaciones/ver/' . $id))
                         ->with('mensaje', 'La cotización se ha actualizado correctamente.');
     }

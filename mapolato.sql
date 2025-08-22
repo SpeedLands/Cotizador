@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 01-08-2025 a las 01:09:23
+-- Tiempo de generación: 18-08-2025 a las 06:30:06
 -- Versión del servidor: 10.4.32-MariaDB
 -- Versión de PHP: 8.2.12
 
@@ -55,15 +55,9 @@ CREATE TABLE `cotizaciones` (
   `justificacion_ia` text DEFAULT NULL,
   `total_estimado` decimal(10,2) DEFAULT 0.00,
   `status` varchar(50) DEFAULT 'Pendiente',
-  `fecha_creacion` timestamp NOT NULL DEFAULT current_timestamp()
+  `fecha_creacion` timestamp NOT NULL DEFAULT current_timestamp(),
+  `guest_token` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Volcado de datos para la tabla `cotizaciones`
---
-
-INSERT INTO `cotizaciones` (`id`, `nombre_completo`, `whatsapp`, `tipo_evento`, `nombre_empresa`, `direccion_evento`, `fecha_evento`, `hora_evento`, `horario_consumo`, `cantidad_invitados`, `servicios_otros`, `mesa_mantel`, `mesa_mantel_otro`, `personal_servicio`, `acceso_enchufe`, `dificultad_montaje`, `tipo_consumidores`, `restricciones`, `requisitos_adicionales`, `presupuesto`, `como_supiste`, `como_supiste_otro`, `total_base`, `costo_adicional_ia`, `justificacion_ia`, `total_estimado`, `status`, `fecha_creacion`) VALUES
-(1, 'Juan de Dios Perez Lopez', '123456778', 'Social', '', 'mi casa', '2025-07-16', '19:51:00', '8:00PM', 10, '', 'Si', '', 'No', 'Si', 'distacia a  caminar', 'Mixto', 'nueces', 'montaje silencioso', '$ 5000 - $ 7000', 'Recomendacion', '', 30.00, 650.00, 'Por incremento de tiempo y esfuerzo en transporte de equipo a distancia y montaje silencioso que requiere mayor precaución.', 680.00, 'Pendiente', '2025-07-17 00:52:41');
 
 -- --------------------------------------------------------
 
@@ -76,15 +70,6 @@ CREATE TABLE `cotizacion_servicios` (
   `cotizacion_id` int(11) NOT NULL,
   `servicio_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Volcado de datos para la tabla `cotizacion_servicios`
---
-
-INSERT INTO `cotizacion_servicios` (`id`, `cotizacion_id`, `servicio_id`) VALUES
-(4, 1, 2),
-(5, 1, 7),
-(6, 1, 9);
 
 -- --------------------------------------------------------
 
@@ -124,32 +109,21 @@ CREATE TABLE `servicios` (
 --
 
 INSERT INTO `servicios` (`id`, `nombre`, `descripcion`, `precio_base`, `tipo_cobro`, `min_personas`, `imagen_url`) VALUES
-(1, 'Consumo de Chafers / Baños Maria', NULL, 100.00, 'fijo', 1, NULL),
-(2, 'Consumo de cazuelas', NULL, 10.00, 'fijo', 1, NULL),
-(3, 'Mesa de Bocadillos / Canapes', NULL, 10.00, 'por_persona', 30, NULL),
-(4, 'Mesa de Postres', NULL, 10.00, 'por_persona', 30, NULL),
-(5, 'Mesa de Snacks (papitas y dulces)', NULL, 10.00, 'por_persona', 30, NULL),
-(6, 'Barra de ensaladas', NULL, 10.00, 'por_persona', 30, NULL),
-(7, 'Estación de Cafe', NULL, 10.00, 'fijo', 1, NULL),
+(1, 'Consumo de Chafers / Baños Maria', 'Descripcion de prueba', 100.00, 'por_persona', 1, 'uploads/servicios/1755337383_345aaac3e8741494e583.jpg'),
+(2, 'Consumo de cazuelas', NULL, 10.00, 'por_persona', 1, NULL),
+(3, 'Mesa de Bocadillos / Canapes', NULL, 10.00, 'fijo', 30, NULL),
+(4, 'Mesa de Postres', NULL, 10.00, 'fijo', 30, NULL),
+(5, 'Mesa de Snacks (papitas y dulces)', NULL, 10.00, 'fijo', 30, NULL),
+(6, 'Barra de ensaladas', NULL, 10.00, 'fijo', 30, NULL),
+(7, 'Estación de Cafe', NULL, 10.00, 'por_persona', 1, NULL),
 (8, 'Lunch Box', NULL, 10.00, 'por_persona', 1, NULL),
 (9, 'Tabla de Charcutería', NULL, 10.00, 'fijo', 10, NULL),
-(10, 'Mesa de Charcutería', NULL, 10.00, 'por_persona', 50, NULL),
-(11, 'Charcutería individual', NULL, 10.00, 'por_persona', 15, NULL),
-(12, 'Bebida en dispensador (Aguas de Sabor)', NULL, 10.00, 'por_litro', 1, NULL);
-
--- --------------------------------------------------------
-
---
--- Estructura de tabla para la tabla `user_fcm_tokens`
---
-
-CREATE TABLE `user_fcm_tokens` (
-  `id` bigint(20) UNSIGNED NOT NULL,
-  `user_id` int(11) NOT NULL,
-  `token` text NOT NULL,
-  `device_name` varchar(255) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+(10, 'Mesa de Charcutería', NULL, 10.00, 'fijo', 50, NULL),
+(11, 'Charcutería individual', NULL, 10.00, 'fijo', 15, NULL),
+(12, 'Bebida en dispensador (Aguas de Sabor)', NULL, 10.00, 'por_litro', 1, NULL),
+(13, 'Modalidad: Buffet Asistido por Staff', 'Personal para asistir a los invitados en la barra.', 500.00, 'fijo', 1, NULL),
+(14, 'Modalidad: Servicio a la Mesa', 'Meseros para llevar los platillos a cada invitado.', 1500.00, 'fijo', 1, NULL),
+(15, 'Modalidad: Buffet / Self Service', 'Los invitados se sirven directamente de la barra.', 0.00, 'fijo', 1, NULL);
 
 -- --------------------------------------------------------
 
@@ -180,6 +154,7 @@ INSERT INTO `usuarios` (`id`, `nombre_usuario`, `email`, `password_hash`) VALUES
 --
 ALTER TABLE `cotizaciones`
   ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `guest_token_unique` (`guest_token`),
   ADD KEY `idx_status` (`status`),
   ADD KEY `idx_fecha_evento` (`fecha_evento`);
 
@@ -205,14 +180,6 @@ ALTER TABLE `servicios`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indices de la tabla `user_fcm_tokens`
---
-ALTER TABLE `user_fcm_tokens`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uk_token` (`token`(255)),
-  ADD KEY `fk_user_fcm_tokens_user_id` (`user_id`);
-
---
 -- Indices de la tabla `usuarios`
 --
 ALTER TABLE `usuarios`
@@ -228,13 +195,13 @@ ALTER TABLE `usuarios`
 -- AUTO_INCREMENT de la tabla `cotizaciones`
 --
 ALTER TABLE `cotizaciones`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT de la tabla `cotizacion_servicios`
 --
 ALTER TABLE `cotizacion_servicios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT de la tabla `notifications`
@@ -246,13 +213,7 @@ ALTER TABLE `notifications`
 -- AUTO_INCREMENT de la tabla `servicios`
 --
 ALTER TABLE `servicios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
-
---
--- AUTO_INCREMENT de la tabla `user_fcm_tokens`
---
-ALTER TABLE `user_fcm_tokens`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT de la tabla `usuarios`
@@ -269,12 +230,6 @@ ALTER TABLE `usuarios`
 --
 ALTER TABLE `notifications`
   ADD CONSTRAINT `fk_notifications_user_id` FOREIGN KEY (`user_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE;
-
---
--- Filtros para la tabla `user_fcm_tokens`
---
-ALTER TABLE `user_fcm_tokens`
-  ADD CONSTRAINT `fk_user_fcm_tokens_user_id` FOREIGN KEY (`user_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

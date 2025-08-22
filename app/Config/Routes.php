@@ -11,11 +11,8 @@ $routes->post('login', 'AuthController::attemptLogin');
 $routes->get('logout', 'AuthController::logout');
 
 $routes->get('/', 'Cotizador::index');
-
 $routes->post('cotizador/calcular', 'Cotizador::calcular');
-
 $routes->post('cotizador/guardar', 'Cotizador::guardar');
-
 $routes->get('cotizador/fechas-ocupadas', 'Cotizador::fechasOcupadas');
 
 $routes->group('admin', ['filter' => 'auth'], static function ($routes) {
@@ -38,19 +35,48 @@ $routes->group('admin', ['filter' => 'auth'], static function ($routes) {
 });
 
 $routes->group('api/v1', static function ($routes) {
-    // Rutas de autenticación
+    // ===================================================================
+    // --- ZONA PÚBLICA / INVITADO ---
+    // ===================================================================
     $routes->post('auth/login', 'Api\AuthController::login');
-    // esta ruta es probable que no se use
     $routes->post('auth/register', 'Api\AuthController::register');
 
-    // Ruta para obtener la lista de servicios
-    $routes->get('servicios', 'Api\ServiciosController::index');
-    // GET para obtener las fechas no disponibles del calendario
+    $routes->resource('servicios', [
+        'controller' => 'Api\ServiciosController',
+        'only' => ['index', 'show']
+    ]);
+
+    // Rutas de cotizaciones para INVITADOS
+    $routes->post('cotizaciones', 'Api\CotizacionesController::create');
+    $routes->get('cotizaciones/(:num)', 'Api\CotizacionesController::show/$1');
+    $routes->put('cotizaciones/(:num)', 'Api\CotizacionesController::update/$1');
+    
     $routes->get('calendario/fechas-ocupadas', 'Api\CotizacionesController::fechasOcupadas');
 
-    // POST para crear/guardar una nueva cotización
-    $routes->post('cotizaciones', 'Api\CotizacionesController::guardar');
+    // ===================================================================
+    // --- ZONA PROTEGIDA / ADMINISTRADOR ---
+    // ===================================================================
+    // Todas las rutas aquí dentro estarán prefijadas con 'admin/' y requerirán JWT
+    $routes->group('admin', ['filter' => 'api-auth'], static function ($routes) {
+        
+        $routes->get('dashboard', 'Api\DashboardController::index');
 
-    // GET para listar todas las cotizaciones
-    $routes->get('cotizaciones', 'Api\CotizacionesController::index');
+        // Rutas de servicios para ADMINS (ej: POST /api/v1/admin/servicios)
+        $routes->resource('servicios', [
+            'controller' => 'Api\ServiciosController',
+            'except' => ['index', 'show']
+        ]);
+
+        // Rutas de cotizaciones para ADMINS (ej: GET /api/v1/admin/cotizaciones/16)
+        $routes->resource('cotizaciones', [
+            'controller' => 'Api\CotizacionesController',
+            // No excluimos nada, el admin tiene acceso a todo.
+        ]);
+
+        // Rutas de notificaciones para ADMINS
+        $routes->resource('notifications', ['controller' => 'Api\NotificationsController']);
+
+        // Rutas de calendario para ADMINS
+        $routes->get('calendario/eventos', 'Api\CalendarioController::index');
+    });
 });
