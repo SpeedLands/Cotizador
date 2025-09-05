@@ -4,7 +4,8 @@ namespace App\Controllers\Api;
 
 use App\Controllers\BaseController;
 use App\Models\UsuarioModel;
-use \Firebase\JWT\JWT; // <-- Importa la librería JWT
+use \Firebase\JWT\JWT;
+use \Firebase\JWT\Key;
 
 class AuthController extends BaseController
 {
@@ -52,14 +53,92 @@ class AuthController extends BaseController
 
         $token = JWT::encode($payload, $key, 'HS256');
 
+        // --- Generar el Refresh Token ---
+        $refreshToken = bin2hex(random_bytes(32)); // Genera un token aleatorio seguro
+        $refreshTokenExp = time() + (3600 * 24 * 30); // Expira en 30 días
+
+        // --- Guardar el HASH del refresh token en la base de datos ---
+        $model->update($user['id'], [
+            'refresh_token' => hash('sha256', $refreshToken),
+            'refresh_token_expires_at' => date('Y-m-d H:i:s', $refreshTokenExp)
+        ]);
+
         // --- Respuesta exitosa con el token y datos del usuario ---
         return $this->response->setJSON([
             'status' => 'success',
             'message' => 'Login exitoso',
             'token' => $token,
+            'refresh_token' => $refreshToken,
+            'expires_in' => 3600 * 24, // Duración del token en segundos
             'user' => [
                 'id'    => $user['id'],
                 'name'  => $user['nombre_usuario'], // Asegúrate que este campo exista en tu DB
+                'email' => $user['email'],
+            ]
+        ])->setStatusCode(200);
+    }
+
+    // MÉTODO PARA REFRESCAR EL TOKEN
+    public function refresh()
+    {
+        $json = $this->request->getJSON();
+
+        if (!isset($json->refresh_token)) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Falta el refresh_token'
+            ])->setStatusCode(400);
+        }
+
+        $model = new UsuarioModel();
+        $hashedToken = hash('sha256', $json->refresh_token);
+
+        // Buscar el usuario con el refresh token que no haya expirado
+        $user = $model->where('refresh_token', $hashedToken)
+                      ->where('refresh_token_expires_at >', date('Y-m-d H:i:s'))
+                      ->first();
+
+        if (is_null($user)) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'El refresh token es inválido o ha expirado'
+            ])->setStatusCode(401);
+        }
+
+        // --- Si el token es válido, generamos un nuevo par de tokens (Rotación de tokens) ---
+        $key = getenv('jwt.secretkey');
+        $iat = time();
+        $exp = $iat + 3600 * 24; // Nuevo token expira en 24 horas
+
+        $payload = [
+            'iss' => 'mapolato-api',
+            'aud' => 'mapolato-app',
+            'iat' => $iat,
+            'exp' => $exp,
+            'user_id' => $user['id'],
+            'email' => $user['email'],
+        ];
+
+        $newToken = JWT::encode($payload, $key, 'HS256');
+
+        $newRefreshToken = bin2hex(random_bytes(32));
+        $newRefreshTokenExp = time() + (3600 * 24 * 30);
+
+        // Actualizamos el refresh token en la base de datos
+        $model->update($user['id'], [
+            'refresh_token' => hash('sha256', $newRefreshToken),
+            'refresh_token_expires_at' => date('Y-m-d H:i:s', $newRefreshTokenExp)
+        ]);
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'message' => 'Token refrescado exitosamente',
+            'token' => $newToken,
+            'refresh_token' => $newRefreshToken,
+            'expires_in' => 3600,
+            'user' => [
+                'id'    => $user['id'],
+                'name'  => $user['nombre_usuario'],
                 'email' => $user['email'],
             ]
         ])->setStatusCode(200);

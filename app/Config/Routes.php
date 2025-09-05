@@ -40,6 +40,7 @@ $routes->group('api/v1', static function ($routes) {
     // ===================================================================
     $routes->post('auth/login', 'Api\AuthController::login');
     $routes->post('auth/register', 'Api\AuthController::register');
+    $routes->post('auth/refresh', 'Api\AuthController::refresh');
 
     $routes->resource('servicios', [
         'controller' => 'Api\ServiciosController',

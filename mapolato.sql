@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 18-08-2025 a las 06:30:06
+-- Tiempo de generación: 30-08-2025 a las 02:09:08
 -- Versión del servidor: 10.4.32-MariaDB
 -- Versión de PHP: 8.2.12
 
@@ -135,15 +135,17 @@ CREATE TABLE `usuarios` (
   `id` int(11) NOT NULL,
   `nombre_usuario` varchar(100) NOT NULL,
   `email` varchar(255) NOT NULL,
-  `password_hash` varchar(255) NOT NULL
+  `password_hash` varchar(255) NOT NULL,
+  `refresh_token` varchar(255) DEFAULT NULL,
+  `refresh_token_expires_at` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Volcado de datos para la tabla `usuarios`
 --
 
-INSERT INTO `usuarios` (`id`, `nombre_usuario`, `email`, `password_hash`) VALUES
-(1, 'admin', 'admin@mapolato.com', '$2y$10$MR5ByC.0Xa2Sj.ZEV9eLYOebe91I/Q.2DRRc/4sNtH74Ewidy.qXW');
+INSERT INTO `usuarios` (`id`, `nombre_usuario`, `email`, `password_hash`, `refresh_token`, `refresh_token_expires_at`) VALUES
+(1, 'admin', 'admin@mapolato.com', '$2y$10$MR5ByC.0Xa2Sj.ZEV9eLYOebe91I/Q.2DRRc/4sNtH74Ewidy.qXW', NULL, NULL);
 
 --
 -- Índices para tablas volcadas
